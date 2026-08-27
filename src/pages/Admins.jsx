@@ -2,14 +2,7 @@ import { useState, useEffect } from 'react'
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { db, auth } from '../firebase/config'
-
-const ESTADOS_CIDADES = {
-  'SP': ['Piracicaba', 'São Paulo', 'Campinas', 'Ribeirão Preto', 'Sorocaba'],
-  'MG': ['Belo Horizonte', 'Contagem', 'Betim', 'Divinópolis', 'Montes Claros'],
-  'RJ': ['Rio de Janeiro', 'Niterói', 'Duque de Caxias', 'São Gonçalo', 'Itaboraí'],
-  'BA': ['Salvador', 'Feira de Santana', 'Vitória da Conquista', 'Camaçari', 'Ilhéus'],
-  'RS': ['Porto Alegre', 'Caxias do Sul', 'Pelotas', 'Santa Maria', 'Gravataí'],
-}
+import { carregarEstados, carregarCidades } from '../utils/estadosCidades'
 
 const VAZIO = { nome: '', email: '', senha: '', estado: '', cidade: '', status: 'ativo' }
 
@@ -38,18 +31,34 @@ export default function Admins() {
   const [loading, setLoading] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
+  const [estados, setEstados] = useState([])
+  const [cidades, setCidades] = useState([])
+  const [carregandoCidades, setCarregandoCidades] = useState(false)
 
   useEffect(() => {
+    // Carregar admins do Firebase
     const unsub = onSnapshot(collection(db, 'admins'), snap => {
       setAdmins(snap.docs.map(d => ({ ...d.data(), id: d.id })))
       setLoading(false)
     })
+
+    // Carregar estados do Brasil API
+    carregarEstados().then(est => setEstados(est))
+
     return unsub
   }, [])
 
-  function abrirNovo() { setForm(VAZIO); setErro(''); setModal('novo') }
+  function abrirNovo() { setForm(VAZIO); setCidades([]); setErro(''); setModal('novo') }
   function abrirVer(a) { setSelecionado(a); setModal('ver') }
-  function fechar() { setModal(null); setSelecionado(null); setForm(VAZIO); setErro('') }
+  function abrirEditar(a) { setForm({ nome: a.nome, email: a.email, estado: a.estado, cidade: a.cidade, status: a.status, senha: '' }); setSelecionado(a); carregarCidades(a.estado).then(setCidades); setErro(''); setModal('editar') }
+  function fechar() { setModal(null); setSelecionado(null); setForm(VAZIO); setCidades([]); setErro('') }
+
+  async function carregarCidadesDoEstado(uf) {
+    setCarregandoCidades(true)
+    const cidadesCarregadas = await carregarCidades(uf)
+    setCidades(cidadesCarregadas)
+    setCarregandoCidades(false)
+  }
 
   async function criarAdmin() {
     if (!form.nome || !form.email || !form.senha || !form.estado || !form.cidade) {
@@ -80,6 +89,43 @@ export default function Admins() {
     } catch (e) {
       if (e.code === 'auth/email-already-in-use') setErro('Este e-mail ja esta em uso.')
       else setErro('Erro ao criar admin.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  async function atualizarAdmin() {
+    if (!form.nome || !form.estado || !form.cidade) {
+      setErro('Preencha todos os campos.'); return
+    }
+
+    // Validar se já existe outro admin na mesma cidade (permitir manter o mesmo)
+    const adminExistente = admins.find(a => 
+      a.id !== selecionado.id && 
+      a.cidade === form.cidade && 
+      a.estado === form.estado
+    )
+    if (adminExistente) {
+      setErro(`Já existe outro admin cadastrado em ${form.cidade}, ${form.estado}.`); return
+    }
+
+    setSalvando(true)
+    try {
+      const updateData = {
+        nome: form.nome,
+        estado: form.estado,
+        cidade: form.cidade,
+        status: form.status,
+      }
+      // Só atualiza email se for diferente
+      if (form.email !== selecionado.email) {
+        updateData.email = form.email
+      }
+      await updateDoc(doc(db, 'admins', selecionado.id), updateData)
+      fechar()
+    } catch (e) {
+      setErro('Erro ao atualizar admin.')
+      console.error(e)
     } finally {
       setSalvando(false)
     }
@@ -157,6 +203,7 @@ export default function Admins() {
                 </button>
                 <div className="flex gap-2">
                   <button onClick={() => abrirVer(a)} className="text-xs text-gray-400 hover:text-gray-600">Ver</button>
+                  <button onClick={() => abrirEditar(a)} className="text-xs text-blue-400 hover:text-blue-600">Editar</button>
                   <button onClick={() => remover(a.id)} className="text-xs text-red-400 hover:text-red-600">Remover</button>
                 </div>
               </div>
@@ -212,11 +259,14 @@ export default function Admins() {
                   className={inputClass}
                   style={inputStyle}
                   value={form.estado}
-                  onChange={e => setForm(f => ({ ...f, estado: e.target.value, cidade: '' }))}
+                  onChange={e => {
+                    setForm(f => ({ ...f, estado: e.target.value, cidade: '' }))
+                    if (e.target.value) carregarCidadesDoEstado(e.target.value)
+                  }}
                 >
                   <option value="">Selecione...</option>
-                  {Object.keys(ESTADOS_CIDADES).map(est => (
-                    <option key={est} value={est}>{est}</option>
+                  {estados.map(est => (
+                    <option key={est.sigla} value={est.sigla}>{est.nome}</option>
                   ))}
                 </select>
               </div>
@@ -228,10 +278,10 @@ export default function Admins() {
                   style={inputStyle}
                   value={form.cidade}
                   onChange={e => setForm(f => ({ ...f, cidade: e.target.value }))}
-                  disabled={!form.estado}
+                  disabled={!form.estado || carregandoCidades}
                 >
-                  <option value="">Selecione...</option>
-                  {form.estado && ESTADOS_CIDADES[form.estado].map(cidade => (
+                  <option value="">{carregandoCidades ? 'Carregando...' : 'Selecione...'}</option>
+                  {cidades.map(cidade => (
                     <option key={cidade} value={cidade}>{cidade}</option>
                   ))}
                 </select>
@@ -278,6 +328,12 @@ export default function Admins() {
 
             <div className="flex gap-2 pt-2">
               <button
+                onClick={() => abrirEditar(selecionado)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100"
+              >
+                Editar
+              </button>
+              <button
                 onClick={() => toggleStatus(selecionado)}
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
                 style={{
@@ -292,6 +348,100 @@ export default function Admins() {
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-50 text-red-600 hover:bg-red-100"
               >
                 Remover
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal editar admin */}
+      {modal === 'editar' && selecionado && (
+        <Modal titulo="Editar admin" onClose={fechar}>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold" style={{ color: '#2D5A27' }}>Nome completo</label>
+              <input
+                type="text"
+                className={inputClass}
+                style={inputStyle}
+                value={form.nome}
+                onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold" style={{ color: '#2D5A27' }}>E-mail</label>
+              <input
+                type="email"
+                className={inputClass}
+                style={inputStyle}
+                value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <div className="flex-1 flex flex-col gap-1">
+                <label className="text-xs font-semibold" style={{ color: '#2D5A27' }}>Estado</label>
+                <select
+                  className={inputClass}
+                  style={inputStyle}
+                  value={form.estado}
+                  onChange={e => {
+                    setForm(f => ({ ...f, estado: e.target.value, cidade: '' }))
+                    if (e.target.value) carregarCidadesDoEstado(e.target.value)
+                  }}
+                >
+                  <option value="">Selecione...</option>
+                  {estados.map(est => (
+                    <option key={est.sigla} value={est.sigla}>{est.nome}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex-1 flex flex-col gap-1">
+                <label className="text-xs font-semibold" style={{ color: '#2D5A27' }}>Cidade</label>
+                <select
+                  className={inputClass}
+                  style={inputStyle}
+                  value={form.cidade}
+                  onChange={e => setForm(f => ({ ...f, cidade: e.target.value }))}
+                  disabled={!form.estado || carregandoCidades}
+                >
+                  <option value="">{carregandoCidades ? 'Carregando...' : 'Selecione...'}</option>
+                  {cidades.map(cidade => (
+                    <option key={cidade} value={cidade}>{cidade}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold" style={{ color: '#2D5A27' }}>Status</label>
+              <select
+                className={inputClass}
+                style={inputStyle}
+                value={form.status}
+                onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+              >
+                <option value="ativo">Ativo</option>
+                <option value="inativo">Inativo</option>
+              </select>
+            </div>
+
+            {erro && <p className="text-xs text-red-500 text-center">{erro}</p>}
+
+            <div className="flex gap-2 pt-2">
+              <button onClick={fechar} className="flex-1 py-2.5 rounded-xl border text-sm text-gray-500 hover:bg-gray-50" style={{ borderColor: '#D4E8D1' }}>
+                Cancelar
+              </button>
+              <button
+                onClick={atualizarAdmin}
+                disabled={salvando}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
+                style={{ backgroundColor: '#F5A623' }}
+              >
+                {salvando ? 'Atualizando...' : 'Atualizar admin'}
               </button>
             </div>
           </div>
