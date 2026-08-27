@@ -21,7 +21,6 @@ export default function Dashboard() {
   const [admins, setAdmins] = useState([])
   const [desbravadores, setDesbravadores] = useState([])
   const [coletas, setColetas] = useState([])
-  const [quadrantes, setQuadrantes] = useState([])
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
@@ -30,7 +29,6 @@ export default function Dashboard() {
       onSnapshot(collection(db, 'admins'), s => { setAdmins(s.docs.map(d => ({ ...d.data(), id: d.id }))); setLoading(false) }),
       onSnapshot(collection(db, 'desbravadores'), s => setDesbravadores(s.docs.map(d => ({ ...d.data(), id: d.id })))),
       onSnapshot(collection(db, 'coletas'), s => setColetas(s.docs.map(d => ({ ...d.data(), id: d.id })))),
-      onSnapshot(collection(db, 'quadrantes'), s => setQuadrantes(s.docs.map(d => d.data()))),
     ]
     return () => unsubs.forEach(u => u())
   }, [])
@@ -45,8 +43,6 @@ export default function Dashboard() {
   const desbravadoresAtivos = desbravadores.filter(d => d.status === 'ativo').length
   const coletasValidadas = coletas.filter(c => c.status === 'validado').length
   const coletasPendentes = coletas.filter(c => c.status === 'pendente')
-  const totalPontos = desbravadores.reduce((acc, d) => acc + (d.pontos || 0), 0)
-  const porcentagem = ((quadrantes.length / 2180) * 100).toFixed(1)
 
   const ranking = [...admins]
     .filter(a => a.status === 'ativo')
@@ -64,7 +60,7 @@ export default function Dashboard() {
     <div className="flex flex-col gap-4 h-full overflow-auto">
 
       {/* Metricas principais */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <MetricCard
           label="Admins ativos"
           value={adminsAtivos}
@@ -83,12 +79,6 @@ export default function Dashboard() {
           value={coletasValidadas}
           sub={`${coletasPendentes.length} pendentes`}
           onClick={() => navigate('/coletas')}
-        />
-        <MetricCard
-          label="Piracicaba libertada"
-          value={`${porcentagem}%`}
-          sub={`${quadrantes.length} casas visitadas`}
-          color="#2D5A27"
         />
       </div>
 

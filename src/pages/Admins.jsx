@@ -3,7 +3,15 @@ import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'fireb
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { db, auth } from '../firebase/config'
 
-const VAZIO = { nome: '', email: '', senha: '', regiao: '', status: 'ativo' }
+const ESTADOS_CIDADES = {
+  'SP': ['Piracicaba', 'São Paulo', 'Campinas', 'Ribeirão Preto', 'Sorocaba'],
+  'MG': ['Belo Horizonte', 'Contagem', 'Betim', 'Divinópolis', 'Montes Claros'],
+  'RJ': ['Rio de Janeiro', 'Niterói', 'Duque de Caxias', 'São Gonçalo', 'Itaboraí'],
+  'BA': ['Salvador', 'Feira de Santana', 'Vitória da Conquista', 'Camaçari', 'Ilhéus'],
+  'RS': ['Porto Alegre', 'Caxias do Sul', 'Pelotas', 'Santa Maria', 'Gravataí'],
+}
+
+const VAZIO = { nome: '', email: '', senha: '', estado: '', cidade: '', status: 'ativo' }
 
 function Modal({ titulo, onClose, children }) {
   return (
@@ -44,9 +52,16 @@ export default function Admins() {
   function fechar() { setModal(null); setSelecionado(null); setForm(VAZIO); setErro('') }
 
   async function criarAdmin() {
-    if (!form.nome || !form.email || !form.senha || !form.regiao) {
+    if (!form.nome || !form.email || !form.senha || !form.estado || !form.cidade) {
       setErro('Preencha todos os campos.'); return
     }
+
+    // Validar se já existe admin na mesma cidade
+    const adminExistente = admins.find(a => a.cidade === form.cidade && a.estado === form.estado)
+    if (adminExistente) {
+      setErro(`Já existe um admin cadastrado em ${form.cidade}, ${form.estado}.`); return
+    }
+
     setSalvando(true)
     try {
       const cred = await createUserWithEmailAndPassword(auth, form.email, form.senha)
@@ -55,7 +70,8 @@ export default function Admins() {
         id: cred.user.uid,
         nome: form.nome,
         email: form.email,
-        regiao: form.regiao,
+        estado: form.estado,
+        cidade: form.cidade,
         status: 'ativo',
         codigoConvite,
         criadoEm: new Date().toISOString(),
@@ -110,7 +126,7 @@ export default function Admins() {
 
         {/* Tabela */}
         <div className="grid grid-cols-5 px-4 py-2 text-xs font-semibold uppercase tracking-wide" style={{ backgroundColor: '#F0FAF0', color: '#2D5A27' }}>
-          {['Admin', 'Regiao', 'Cod. Convite', 'Status', 'Acoes'].map(h => (
+          {['Admin', 'Localizacao', 'Cod. Convite', 'Status', 'Acoes'].map(h => (
             <span key={h}>{h}</span>
           ))}
         </div>
@@ -127,7 +143,7 @@ export default function Admins() {
                   <p className="text-sm font-semibold" style={{ color: '#1A3A17' }}>{a.nome}</p>
                   <p className="text-xs text-gray-400">{a.email}</p>
                 </div>
-                <span className="text-sm text-gray-600">{a.regiao}</span>
+                <span className="text-sm text-gray-600">{a.cidade}, {a.estado}</span>
                 <span className="text-sm font-mono font-bold" style={{ color: '#2D5A27' }}>{a.codigoConvite}</span>
                 <button
                   onClick={() => toggleStatus(a)}
@@ -153,24 +169,74 @@ export default function Admins() {
       {modal === 'novo' && (
         <Modal titulo="Novo admin" onClose={fechar}>
           <div className="flex flex-col gap-4">
-            {[
-              { label: 'Nome completo', field: 'nome', placeholder: 'Ex: Joao Silva', type: 'text' },
-              { label: 'E-mail', field: 'email', placeholder: 'admin@atalaia.com', type: 'email' },
-              { label: 'Senha inicial', field: 'senha', placeholder: 'Minimo 6 caracteres', type: 'password' },
-              { label: 'Regiao / Bairro', field: 'regiao', placeholder: 'Ex: Zona Norte', type: 'text' },
-            ].map(({ label, field, placeholder, type }) => (
-              <div key={field} className="flex flex-col gap-1">
-                <label className="text-xs font-semibold" style={{ color: '#2D5A27' }}>{label}</label>
-                <input
-                  type={type}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold" style={{ color: '#2D5A27' }}>Nome completo</label>
+              <input
+                type="text"
+                className={inputClass}
+                style={inputStyle}
+                placeholder="Ex: Joao Silva"
+                value={form.nome}
+                onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold" style={{ color: '#2D5A27' }}>E-mail</label>
+              <input
+                type="email"
+                className={inputClass}
+                style={inputStyle}
+                placeholder="admin@atalaia.com"
+                value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold" style={{ color: '#2D5A27' }}>Senha inicial</label>
+              <input
+                type="password"
+                className={inputClass}
+                style={inputStyle}
+                placeholder="Minimo 6 caracteres"
+                value={form.senha}
+                onChange={e => setForm(f => ({ ...f, senha: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <div className="flex-1 flex flex-col gap-1">
+                <label className="text-xs font-semibold" style={{ color: '#2D5A27' }}>Estado</label>
+                <select
                   className={inputClass}
                   style={inputStyle}
-                  placeholder={placeholder}
-                  value={form[field]}
-                  onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
-                />
+                  value={form.estado}
+                  onChange={e => setForm(f => ({ ...f, estado: e.target.value, cidade: '' }))}
+                >
+                  <option value="">Selecione...</option>
+                  {Object.keys(ESTADOS_CIDADES).map(est => (
+                    <option key={est} value={est}>{est}</option>
+                  ))}
+                </select>
               </div>
-            ))}
+
+              <div className="flex-1 flex flex-col gap-1">
+                <label className="text-xs font-semibold" style={{ color: '#2D5A27' }}>Cidade</label>
+                <select
+                  className={inputClass}
+                  style={inputStyle}
+                  value={form.cidade}
+                  onChange={e => setForm(f => ({ ...f, cidade: e.target.value }))}
+                  disabled={!form.estado}
+                >
+                  <option value="">Selecione...</option>
+                  {form.estado && ESTADOS_CIDADES[form.estado].map(cidade => (
+                    <option key={cidade} value={cidade}>{cidade}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
             {erro && <p className="text-xs text-red-500 text-center">{erro}</p>}
 
@@ -198,7 +264,8 @@ export default function Admins() {
             {[
               ['Nome', selecionado.nome],
               ['E-mail', selecionado.email],
-              ['Regiao', selecionado.regiao],
+              ['Cidade', selecionado.cidade],
+              ['Estado', selecionado.estado],
               ['Status', selecionado.status],
               ['Codigo de convite', selecionado.codigoConvite],
               ['Criado em', selecionado.criadoEm ? new Date(selecionado.criadoEm).toLocaleDateString('pt-BR') : '-'],
