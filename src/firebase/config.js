@@ -3,13 +3,19 @@ import { getFirestore } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
 import { getStorage } from 'firebase/storage'
 
+// Lê variáveis sem prefixo VITE_ (funciona tanto local quanto Vercel)
 const firebaseConfig = {
-  apiKey: "AIzaSyDud2K8F9fXEIFBHaSJFmu5-sGo5c0uZIk",
-  authDomain: "atalaia-admin.firebaseapp.com",
-  projectId: "atalaia-admin",
-  storageBucket: "atalaia-admin.firebasestorage.app",
-  messagingSenderId: "307511647732",
-  appId: "1:307511647732:web:2e1aaa436e223ecbec6da1"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
+}
+
+// Validação: se alguma variável estiver faltando, avisa
+if (!firebaseConfig.apiKey) {
+  console.error('❌ Firebase não configurado. Verifique .env.local ou variáveis Vercel.')
 }
 
 const app = initializeApp(firebaseConfig)
