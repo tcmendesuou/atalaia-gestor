@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore'
+import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, where, getDocs, writeBatch } from 'firebase/firestore'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { db, auth } from '../firebase/config'
 import { carregarEstados, carregarCidades } from '../utils/estadosCidades'
@@ -58,6 +58,30 @@ export default function Admins() {
     setCarregandoCidades(false)
   }
 
+  async function reconectarDesbravadores(estado, cidade, novoAdminId) {
+    try {
+      const q = query(
+        collection(db, 'desbravadores'),
+        where('estado', '==', estado),
+        where('cidade', '==', cidade)
+      )
+      const snapshot = await getDocs(q)
+      
+      if (snapshot.empty) return
+
+      const batch = writeBatch(db)
+      snapshot.docs.forEach(docSnap => {
+        batch.update(doc(db, 'desbravadores', docSnap.id), {
+          adminId: novoAdminId
+        })
+      })
+      await batch.commit()
+      console.log(`Reconectados ${snapshot.size} desbravadores de ${cidade}, ${estado}`)
+    } catch (e) {
+      console.error('Erro ao reconectar desbravadores:', e)
+    }
+  }
+
   async function criarAdmin() {
     if (!form.nome || !form.email || !form.senha || !form.estado || !form.cidade) {
       setErro('Preencha todos os campos.'); return
@@ -83,6 +107,9 @@ export default function Admins() {
         codigoConvite,
         criadoEm: new Date().toISOString(),
       })
+      
+      await reconectarDesbravadores(form.estado, form.cidade, cred.user.uid)
+      
       fechar()
     } catch (e) {
       if (e.code === 'auth/email-already-in-use') setErro('Este e-mail ja esta em uso.')
@@ -135,9 +162,33 @@ export default function Admins() {
   }
 
   async function remover(id) {
+    const adminARemover = admins.find(a => a.id === id)
+    if (!adminARemover) return
+
+    try {
+      const q = query(
+        collection(db, 'desbravadores'),
+        where('adminId', '==', id)
+      )
+      const snapshot = await getDocs(q)
+      
+      if (!snapshot.empty) {
+        setErro(`Nao e possivel remover. Existem ${snapshot.size} desbravador(es) vinculado(s) a este admin.\n\nPrimeiro, delete os desbravadores ou reatribua-os a outro admin.`)
+        return
+      }
+    } catch (e) {
+      console.error('Erro ao verificar desbravadores:', e)
+    }
+
     if (!confirm('Remover este admin?')) return
-    await deleteDoc(doc(db, 'admins', id))
-    fechar()
+    
+    try {
+      await deleteDoc(doc(db, 'admins', id))
+      fechar()
+    } catch (e) {
+      setErro('Erro ao remover admin.')
+      console.error(e)
+    }
   }
 
   if (loading) return (
