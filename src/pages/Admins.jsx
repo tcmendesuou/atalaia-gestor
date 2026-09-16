@@ -36,13 +36,11 @@ export default function Admins() {
   const [carregandoCidades, setCarregandoCidades] = useState(false)
 
   useEffect(() => {
-    // Carregar admins do Firebase
     const unsub = onSnapshot(collection(db, 'admins'), snap => {
       setAdmins(snap.docs.map(d => ({ ...d.data(), id: d.id })))
       setLoading(false)
     })
 
-    // Carregar estados do Brasil API
     carregarEstados().then(est => setEstados(est))
 
     return unsub
@@ -65,10 +63,9 @@ export default function Admins() {
       setErro('Preencha todos os campos.'); return
     }
 
-    // Validar se já existe admin na mesma cidade
     const adminExistente = admins.find(a => a.cidade === form.cidade && a.estado === form.estado)
     if (adminExistente) {
-      setErro(`Já existe um admin cadastrado em ${form.cidade}, ${form.estado}.`); return
+      setErro(`Ja existe um admin cadastrado em ${form.cidade}, ${form.estado}.`); return
     }
 
     setSalvando(true)
@@ -81,6 +78,7 @@ export default function Admins() {
         email: form.email,
         estado: form.estado,
         cidade: form.cidade,
+        regiao: form.estado,
         status: 'ativo',
         codigoConvite,
         criadoEm: new Date().toISOString(),
@@ -99,14 +97,13 @@ export default function Admins() {
       setErro('Preencha todos os campos.'); return
     }
 
-    // Validar se já existe outro admin na mesma cidade (permitir manter o mesmo)
     const adminExistente = admins.find(a => 
       a.id !== selecionado.id && 
       a.cidade === form.cidade && 
       a.estado === form.estado
     )
     if (adminExistente) {
-      setErro(`Já existe outro admin cadastrado em ${form.cidade}, ${form.estado}.`); return
+      setErro(`Ja existe outro admin cadastrado em ${form.cidade}, ${form.estado}.`); return
     }
 
     setSalvando(true)
@@ -115,9 +112,9 @@ export default function Admins() {
         nome: form.nome,
         estado: form.estado,
         cidade: form.cidade,
+        regiao: form.estado,
         status: form.status,
       }
-      // Só atualiza email se for diferente
       if (form.email !== selecionado.email) {
         updateData.email = form.email
       }
@@ -153,7 +150,6 @@ export default function Admins() {
     <div className="flex flex-col gap-4 h-full">
       <div className="bg-white rounded-2xl border overflow-hidden flex flex-col flex-1" style={{ borderColor: '#D4E8D1' }}>
 
-        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: '#D4E8D1' }}>
           <div>
             <span className="text-sm font-semibold" style={{ color: '#1A3A17' }}>Admins cadastrados</span>
@@ -170,7 +166,6 @@ export default function Admins() {
           </button>
         </div>
 
-        {/* Tabela */}
         <div className="grid grid-cols-5 px-4 py-2 text-xs font-semibold uppercase tracking-wide" style={{ backgroundColor: '#F0FAF0', color: '#2D5A27' }}>
           {['Admin', 'Localizacao', 'Cod. Convite', 'Status', 'Acoes'].map(h => (
             <span key={h}>{h}</span>
@@ -189,22 +184,21 @@ export default function Admins() {
                   <p className="text-sm font-semibold" style={{ color: '#1A3A17' }}>{a.nome}</p>
                   <p className="text-xs text-gray-400">{a.email}</p>
                 </div>
-                <span className="text-sm text-gray-600">{a.cidade}, {a.estado}</span>
-                <span className="text-sm font-mono font-bold" style={{ color: '#2D5A27' }}>{a.codigoConvite}</span>
-                <button
-                  onClick={() => toggleStatus(a)}
-                  className="text-xs px-2 py-1 rounded-full w-fit font-semibold transition-colors"
-                  style={{
-                    backgroundColor: a.status === 'ativo' ? '#D4E8D1' : '#f0f0f0',
-                    color: a.status === 'ativo' ? '#2D5A27' : '#888'
-                  }}
-                >
+                <div>
+                  <p className="text-sm" style={{ color: '#1A3A17' }}>{a.cidade}</p>
+                  <p className="text-xs text-gray-500">{a.regiao || a.estado || '—'}</p>
+                </div>
+                <p className="text-sm font-mono text-gray-600">{a.codigoConvite}</p>
+                <span className="text-xs px-2.5 py-1 rounded-full w-fit font-semibold" style={{
+                  backgroundColor: a.status === 'ativo' ? '#D4E8D1' : '#f0f0f0',
+                  color: a.status === 'ativo' ? '#2D5A27' : '#888'
+                }}>
                   {a.status === 'ativo' ? 'Ativo' : 'Inativo'}
-                </button>
-                <div className="flex gap-2">
-                  <button onClick={() => abrirVer(a)} className="text-xs text-gray-400 hover:text-gray-600">Ver</button>
-                  <button onClick={() => abrirEditar(a)} className="text-xs text-blue-400 hover:text-blue-600">Editar</button>
-                  <button onClick={() => remover(a.id)} className="text-xs text-red-400 hover:text-red-600">Remover</button>
+                </span>
+                <div className="flex gap-1">
+                  <button onClick={() => abrirVer(a)} className="text-xs hover:underline" style={{ color: '#2D5A27' }}>Ver</button>
+                  <button onClick={() => abrirEditar(a)} className="text-xs hover:underline" style={{ color: '#2D5A27' }}>Editar</button>
+                  <button onClick={() => remover(a.id)} className="text-xs hover:underline text-red-500">Remover</button>
                 </div>
               </div>
             ))
@@ -212,7 +206,6 @@ export default function Admins() {
         </div>
       </div>
 
-      {/* Modal novo admin */}
       {modal === 'novo' && (
         <Modal titulo="Novo admin" onClose={fechar}>
           <div className="flex flex-col gap-4">
@@ -222,7 +215,6 @@ export default function Admins() {
                 type="text"
                 className={inputClass}
                 style={inputStyle}
-                placeholder="Ex: Joao Silva"
                 value={form.nome}
                 onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
               />
@@ -234,19 +226,17 @@ export default function Admins() {
                 type="email"
                 className={inputClass}
                 style={inputStyle}
-                placeholder="admin@atalaia.com"
                 value={form.email}
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
               />
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold" style={{ color: '#2D5A27' }}>Senha inicial</label>
+              <label className="text-xs font-semibold" style={{ color: '#2D5A27' }}>Senha</label>
               <input
                 type="password"
                 className={inputClass}
                 style={inputStyle}
-                placeholder="Minimo 6 caracteres"
                 value={form.senha}
                 onChange={e => setForm(f => ({ ...f, senha: e.target.value }))}
               />
@@ -307,7 +297,6 @@ export default function Admins() {
         </Modal>
       )}
 
-      {/* Modal ver detalhes */}
       {modal === 'ver' && selecionado && (
         <Modal titulo="Detalhes do admin" onClose={fechar}>
           <div className="flex flex-col gap-3">
@@ -316,6 +305,7 @@ export default function Admins() {
               ['E-mail', selecionado.email],
               ['Cidade', selecionado.cidade],
               ['Estado', selecionado.estado],
+              ['Regiao', selecionado.regiao || selecionado.estado || '—'],
               ['Status', selecionado.status],
               ['Codigo de convite', selecionado.codigoConvite],
               ['Criado em', selecionado.criadoEm ? new Date(selecionado.criadoEm).toLocaleDateString('pt-BR') : '-'],
@@ -354,7 +344,6 @@ export default function Admins() {
         </Modal>
       )}
 
-      {/* Modal editar admin */}
       {modal === 'editar' && selecionado && (
         <Modal titulo="Editar admin" onClose={fechar}>
           <div className="flex flex-col gap-4">
